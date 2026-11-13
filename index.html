@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>微歐判讀儀表板</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--ink:#1c2230;--muted:#6b7280;--line:#e5e7eb;--bull:#16834a;--bear:#c2362b;--neutral:#6b7280;--accent:#1f4e8c}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line)}
+  header h1{margin:0;font-size:19px}
+  .sub{color:var(--muted);font-size:12px}
+  header button{padding:7px 14px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;cursor:pointer;font-family:inherit}
+  main{padding:14px 20px 30px;display:grid;gap:14px}
+  .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .g32{display:grid;grid-template-columns:3fr 2fr;gap:14px}
+  @media(max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g2,.g32{grid-template-columns:1fr}}
+  @media(max-width:640px){
+    main{padding:10px;gap:10px}
+    header{padding:10px 12px} header h1{font-size:16px}
+    .g4{grid-template-columns:1fr 1fr;gap:10px}
+    .span2{grid-column:1 / -1 !important}
+    .kpi .val{font-size:22px} .kpi{padding:8px 10px}
+    .man{flex-wrap:wrap} .man input{width:80px}
+    .chartbox{height:240px} .h-big{height:300px} .h-cal{height:380px}
+    .card h2{font-size:13px;flex-wrap:wrap;gap:4px}
+  }
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+  .card h2{margin:0;padding:9px 12px;font-size:14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+  .card h2 .tag{font-weight:400;font-size:11px;color:var(--muted)}
+  .kpi{padding:10px 12px}
+  .kpi .val{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+  .kpi .unit{font-size:13px;color:var(--muted);font-weight:400}
+  .kpi .chg{font-size:13px;margin-top:2px;font-variant-numeric:tabular-nums}
+  .up{color:var(--bear)} .down{color:var(--bull)}
+  .src{font-size:11px;color:var(--muted);padding:6px 12px;border-top:1px solid var(--line);background:#fafafa;line-height:1.5}
+  .src.err{color:var(--bear)}
+  .man{display:flex;gap:6px;padding:6px 12px 10px;align-items:center;font-size:12px;color:var(--muted)}
+  .man input{width:90px;padding:4px 6px;border:1px solid var(--line);border-radius:5px;font-family:inherit}
+  .man button{padding:4px 8px;border:1px solid var(--line);background:#fff;border-radius:5px;cursor:pointer;font-family:inherit;font-size:12px}
+  .chartbox{position:relative;height:300px;padding:8px 10px}
+  .w{flex:1}
+  .h-tape{height:78px} .h-big{height:340px} .h-cal{height:420px}
+  .score{padding:10px 12px}
+  .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--line)}
+  .lbl{font-size:13px}
+  .lbl small{display:block;color:var(--muted);font-size:11px}
+  .pill{font-size:12px;padding:4px 10px;border-radius:12px;background:#eee;white-space:nowrap}
+  .pill.b1{background:var(--bull);color:#fff} .pill.b-1{background:var(--bear);color:#fff} .pill.b0{background:var(--neutral);color:#fff}
+  .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg button{border:0;background:#fff;padding:5px 9px;font-size:12px;cursor:pointer;font-family:inherit}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button.on[data-v="1"]{background:var(--bull);color:#fff}
+  .seg button.on[data-v="0"]{background:var(--neutral);color:#fff}
+  .seg button.on[data-v="-1"]{background:var(--bear);color:#fff}
+  .total{margin-top:10px;padding:12px;border-radius:8px;background:#f3f4f6;display:flex;justify-content:space-between;align-items:center}
+  .total .big{font-size:22px;font-weight:700}
+  .total.bull{background:#e8f5ee;color:var(--bull)} .total.bear{background:#fbeaea;color:var(--bear)}
+  textarea{width:100%;margin-top:10px;min-height:56px;border:1px solid var(--line);border-radius:6px;padding:8px;font-family:inherit;font-size:13px}
+  .btns{display:flex;gap:8px;margin-top:8px}
+  .btns button{flex:1;padding:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;cursor:pointer;font-family:inherit}
+  #msg{font-size:12px;color:var(--muted);margin-top:4px;white-space:pre-wrap}
+  table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+  th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--muted);font-weight:500;background:#fafafa;position:sticky;top:0}
+  .tblwrap{max-height:340px;overflow:auto}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>微型歐元（EUR/USD）每日判讀儀表板</h1>
+    <div class="sub">資料：美國財政部、歐洲央行、Frankfurter（歐洲央行匯率）｜即時圖：TradingView｜<span id="stamp">載入中…</span></div>
+  </div>
+  <button id="reload">重新抓取資料</button>
+</header>
+
+<main>
+  <section class="card"><div class="w h-tape" id="tape"></div></section>
+
+  <!-- 四大指標 -->
+  <section class="g4">
+    <div class="card">
+      <h2>美國 2 年期殖利率 <span class="tag">美國財政部</span></h2>
+      <div class="kpi"><div class="val" id="v-us">—</div><div class="chg" id="c-us"></div></div>
+      <div class="man">手動今日值 <input id="m-us" type="number" step="0.001" placeholder="例 4.861"><button data-k="us">存</button></div>
+      <div class="src" id="s-us">載入中…</div>
+    </div>
+    <div class="card">
+      <h2>歐元區 2 年期殖利率 <span class="tag">歐洲央行・AAA 曲線 ≈ 德債</span></h2>
+      <div class="kpi"><div class="val" id="v-de">—</div><div class="chg" id="c-de"></div></div>
+      <div class="man">手動今日值 <input id="m-de" type="number" step="0.001" placeholder="例 3.155"><button data-k="de">存</button></div>
+      <div class="src" id="s-de">載入中…</div>
+    </div>
+    <div class="card">
+      <h2>美德 2 年期利差 <span class="tag">核心指標</span></h2>
+      <div class="kpi"><div class="val" id="v-sp">—</div><div class="chg" id="c-sp"></div></div>
+      <div class="src" id="s-sp">利差擴大 → 偏空歐元；收斂 → 偏多歐元</div>
+    </div>
+    <div class="card">
+      <h2>美元指數（換算） <span class="tag">由歐洲央行匯率計算</span></h2>
+      <div class="kpi"><div class="val" id="v-dx">—</div><div class="chg" id="c-dx"></div></div>
+      <div class="src" id="s-dx">載入中…</div>
+    </div>
+  </section>
+
+  <section class="g4">
+    <div class="card">
+      <h2>歐元兌美元 <span class="tag">歐洲央行參考匯率</span></h2>
+      <div class="kpi"><div class="val" id="v-eu">—</div><div class="chg" id="c-eu"></div></div>
+      <div class="src" id="s-eu">載入中…</div>
+    </div>
+    <div class="card">
+      <h2>歐洲天然氣 TTF <span class="tag">無免費開放來源・手動</span></h2>
+      <div class="kpi"><div class="val" id="v-tf">—</div><div class="chg" id="c-tf"></div></div>
+      <div class="man">手動今日值 <input id="m-tf" type="number" step="0.01" placeholder="例 94.95"><button data-k="tf">存</button></div>
+      <div class="src"><a href="https://tw.tradingview.com/symbols/ICEENDEX-TFM1!/" target="_blank" rel="noopener">開 TradingView 看 TTF</a>，輸入一次後會累積成走勢</div>
+    </div>
+    <div class="card span2" style="grid-column:span 2">
+      <h2>資料狀態</h2>
+      <div class="src" id="status" style="border-top:0;background:#fff;font-size:12px">檢查中…</div>
+    </div>
+  </section>
+
+  <!-- 走勢圖 -->
+  <section class="g2">
+    <div class="card">
+      <h2>利差（bp，左軸） vs 歐元兌美元（右軸） <span class="tag">近 3 個月日資料</span></h2>
+      <div class="chartbox"><canvas id="ch1"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>美國 vs 歐元區 2 年期殖利率 <span class="tag">%</span></h2>
+      <div class="chartbox"><canvas id="ch2"></canvas></div>
+    </div>
+  </section>
+
+  <!-- 判讀 + 表格 -->
+  <section class="g32">
+    <div class="card">
+      <h2>近 15 個交易日數據</h2>
+      <div class="tblwrap"><table id="tbl"></table></div>
+    </div>
+    <div class="card">
+      <h2>今日判讀 <span class="tag" id="today"></span></h2>
+      <div class="score">
+        <div id="autoRows"></div>
+        <div class="row"><div class="lbl">歐洲政治／財政<small>法德利差擴大 −1／收斂 +1</small></div>
+          <div class="seg" data-k="fr"><button data-v="1">+1</button><button data-v="0">0</button><button data-v="-1">−1</button></div></div>
+        <div class="row"><div class="lbl">消息面／數據<small>美鷹歐鴿 −1／美鴿歐鷹 +1</small></div>
+          <div class="seg" data-k="news"><button data-v="1">+1</button><button data-v="0">0</button><button data-v="-1">−1</button></div></div>
+        <div class="total" id="totalBox"><div>綜合判讀<br><span class="big" id="verdict">—</span></div><div class="big" id="sum">0</div></div>
+        <textarea id="note" placeholder="今日重點（例：今晚 21:30 美國 PPI）"></textarea>
+        <div class="btns"><button id="copy">複製判讀文字</button></div>
+        <div id="msg"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 即時圖（TradingView 可嵌入的商品） -->
+  <section class="g32">
+    <div class="card">
+      <h2>歐元兌美元即時走勢 <span class="tag">TradingView・小時線</span></h2>
+      <div class="w h-big" id="eurusd"></div>
+    </div>
+    <div class="card">
+      <h2>經濟數據行事曆 <span class="tag">美・歐元區・德・法</span></h2>
+      <div class="w h-cal" id="cal"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ================= 工具 ================= */
+const TPE = d => d.toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'});
+const todayKey = TPE(new Date());
+const START = new Date(Date.now() - 130*864e5).toISOString().slice(0,10);
+const $ = id => document.getElementById(id);
+$('today').textContent = todayKey;
+
+function store(k, v){ try{ if(v===undefined) return JSON.parse(localStorage.getItem(k)||'null'); localStorage.setItem(k, JSON.stringify(v)); }catch(e){ return null; } }
+
+async function getText(url, ms=15000){
+  const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), ms);
+  try{ const r = await fetch(url,{signal:ctl.signal,cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status); return await r.text(); }
+  finally{ clearTimeout(t); }
+}
+function parseCSV(t){
+  const rows=[]; let cur=[], f='', q=false;
+  for(let i=0;i<t.length;i++){ const c=t[i];
+    if(q){ if(c==='"'){ if(t[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"') q=true; else if(c===','){cur.push(f);f='';}
+    else if(c==='\n'){cur.push(f);rows.push(cur);cur=[];f='';} else if(c!=='\r') f+=c; }
+  if(f!==''||cur.length){cur.push(f);rows.push(cur);}
+  return rows.filter(r=>r.length>1);
+}
+const mdy = s => { const m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m?`${m[3]}-${m[1]}-${m[2]}`:s; };
+
+/* ================= 資料來源（依序嘗試） ================= */
+const status = {};
+async function tryAll(name, fns){
+  const errs=[];
+  for(const [label,fn] of fns){
+    try{ const m = await fn(); if(m && m.size){ status[name]={ok:true,src:label}; return m; } errs.push(label+'：無資料'); }
+    catch(e){ errs.push(label+'：'+(e.name==='AbortError'?'逾時':e.message||'被瀏覽器擋下')); }
+  }
+  status[name]={ok:false,err:errs.join('；')}; return new Map();
+}
+
+// 美國 2 年期
+async function usTreasury(){
+  const now=new Date(), y=now.getFullYear(), years = now.getMonth()<4 ? [y-1,y] : [y];
+  const m=new Map();
+  for(const yr of years){
+    const t = await getText(`https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/${yr}/all?type=daily_treasury_yield_curve&field_tdr_date_value=${yr}&page&_format=csv`);
+    const rows=parseCSV(t), h=rows[0].map(s=>s.trim()), i=h.indexOf('2 Yr');
+    if(i<0) throw new Error('格式不符');
+    rows.slice(1).forEach(r=>{ const v=parseFloat(r[i]); if(isFinite(v)) m.set(mdy(r[0]), v); });
+  }
+  return m;
+}
+async function usFred(){
+  const t = await getText(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2&cosd=${START}`);
+  const m=new Map(); parseCSV(t).slice(1).forEach(r=>{ const v=parseFloat(r[1]); if(isFinite(v)) m.set(r[0], v); });
+  return m;
+}
+// 歐元區 2 年期（歐洲央行）
+async function ecbYield(key){
+  const t = await getText(`https://data-api.ecb.europa.eu/service/data/YC/${key}?format=csvdata&startPeriod=${START}`);
+  const rows=parseCSV(t), h=rows[0], iT=h.indexOf('TIME_PERIOD'), iV=h.indexOf('OBS_VALUE');
+  const m=new Map(); rows.slice(1).forEach(r=>{ const v=parseFloat(r[iV]); if(isFinite(v)) m.set(r[iT], v); });
+  return m;
+}
+// 匯率（每 1 歐元兌各幣）
+async function fxECB(){
+  const t = await getText(`https://data-api.ecb.europa.eu/service/data/EXR/D.USD+JPY+GBP+CAD+SEK+CHF.EUR.SP00.A?format=csvdata&startPeriod=${START}`);
+  const rows=parseCSV(t), h=rows[0], iT=h.indexOf('TIME_PERIOD'), iV=h.indexOf('OBS_VALUE'), iC=h.indexOf('CURRENCY');
+  const m=new Map();
+  rows.slice(1).forEach(r=>{ const v=parseFloat(r[iV]); if(!isFinite(v)) return; const d=r[iT]; if(!m.has(d)) m.set(d,{}); m.get(d)[r[iC]]=v; });
+  return m;
+}
+async function fxFrankfurter(host){
+  const t = await getText(`${host}/${START}..?from=EUR&to=USD,JPY,GBP,CAD,SEK,CHF`);
+  const j = JSON.parse(t), m=new Map();
+  Object.entries(j.rates||{}).forEach(([d,o])=>m.set(d,o));
+  return m;
+}
+
+/* ================= 手動輸入（累積成走勢） ================= */
+const MKEY='eurusd-manual';
+let manual = store(MKEY) || {us:{},de:{},tf:{}};
+['us','de','tf'].forEach(k=>{ manual[k]=manual[k]||{}; if(manual[k][todayKey]!=null) $('m-'+k).value=manual[k][todayKey]; });
+document.querySelectorAll('.man button').forEach(b=>b.addEventListener('click',()=>{
+  const k=b.dataset.k, v=parseFloat($('m-'+k).value);
+  if(isFinite(v)) manual[k][todayKey]=v; else delete manual[k][todayKey];
+  store(MKEY, manual); render();
+}));
+function withManual(map, k){ const m=new Map(map); Object.entries(manual[k]||{}).forEach(([d,v])=>m.set(d,v)); return new Map([...m].sort((a,b)=>a[0]<b[0]?-1:1)); }
+
+/* ================= 計算 ================= */
+let DATA = {us:new Map(), de:new Map(), fx:new Map()};
+const arr = m => [...m].sort((a,b)=>a[0]<b[0]?-1:1);
+function chg(m, n=5){ const a=arr(m); if(a.length<2) return null; const last=a[a.length-1], prev=a[Math.max(0,a.length-1-n)]; return {d:last[0], v:last[1], pd:prev[0], pv:prev[1], diff:last[1]-prev[1]}; }
+function dxyOf(r){
+  if(!r||!r.USD||!r.JPY||!r.GBP||!r.CAD||!r.SEK||!r.CHF) return null;
+  const eurusd=r.USD, usdjpy=r.JPY/r.USD, gbpusd=r.USD/r.GBP, usdcad=r.CAD/r.USD, usdsek=r.SEK/r.USD, usdchf=r.CHF/r.USD;
+  return 50.14348112*Math.pow(eurusd,-0.576)*Math.pow(usdjpy,0.136)*Math.pow(gbpusd,-0.119)*Math.pow(usdcad,0.091)*Math.pow(usdsek,0.042)*Math.pow(usdchf,0.036);
+}
+const fmt = (v,d=3)=> v==null||!isFinite(v) ? '—' : v.toFixed(d);
+const sgn = v => (v>0?'+':'')+v;
+
+let autoScores = {};
+function render(){
+  const us = withManual(DATA.us,'us'), de = withManual(DATA.de,'de'), tf = withManual(new Map(),'tf');
+  const eu = new Map(), dx = new Map();
+  arr(DATA.fx).forEach(([d,r])=>{ if(r.USD) eu.set(d,r.USD); const x=dxyOf(r); if(x) dx.set(d,x); });
+  const sp = new Map(); us.forEach((v,d)=>{ if(de.has(d)) sp.set(d,(v-de.get(d))*100); });
+
+  const put=(id,m,dec,unit,bp)=>{
+    const c=chg(m); $('v-'+id).innerHTML = c? fmt(c.v,dec)+`<span class="unit"> ${unit}</span>` : '—';
+    if(!c){ $('c-'+id).textContent='尚無資料'; return c; }
+    const dv = bp ? Math.round(c.diff*100*10)/10 : c.diff;
+    const txt = bp ? `${sgn(dv)} bp` : (unit==='bp' ? `${sgn(Math.round(c.diff*10)/10)} bp` : `${sgn(+(c.diff).toFixed(dec))}（${sgn(+(c.diff/c.pv*100).toFixed(2))}%）`);
+    $('c-'+id).innerHTML = `<span class="${c.diff>0?'up':c.diff<0?'down':''}">${txt}</span> <span class="sub">5 日｜最新 ${c.d}</span>`;
+    return c;
+  };
+  const cUS=put('us',us,3,'%',true), cDE=put('de',de,3,'%',true), cSP=put('sp',sp,1,'bp',false);
+  const cEU=put('eu',eu,4,'',false), cDX=put('dx',dx,2,'',false), cTF=put('tf',tf,2,'€/MWh',false);
+  if(cSP && cUS && cDE && cSP.d!==cUS.d) $('s-sp').innerHTML = `利差只算兩邊都有的日期（最新共同日 ${cSP.d}）。歐洲央行殖利率約晚 1 個交易日公布，可手動輸入今日德債補上`;
+
+  // 資料來源說明
+  const srcLine=(id,name)=>{ const s=status[name]; if(!s) return; $('s-'+id).className='src'+(s.ok?'':' err'); $('s-'+id).textContent = s.ok?('來源：'+s.src):('自動抓取失敗，請手動輸入。'+s.err); };
+  srcLine('us','us'); srcLine('de','de'); srcLine('eu','fx'); srcLine('dx','fx');
+  $('status').innerHTML = [['美國 2 年期','us'],['歐元區 2 年期','de'],['匯率／美元指數','fx']].map(([n,k])=>{
+    const s=status[k]; if(!s) return `⏳ ${n}`; return s.ok?`✅ ${n}：${s.src}`:`❌ ${n}：${s.err}`; }).join('<br>') +
+    '<br>ℹ️ 美國財政部與歐洲央行皆為每日收盤資料（非即時），台灣早上可取得前一交易日數值';
+
+  // 自動計分
+  autoScores = {};
+  const auto = [];
+  if(cSP){ const bp=cSP.diff; const s = bp>3?-1:bp<-3?1:0; autoScores.spread=s; auto.push(['美德 2 年期利差',`5 日 ${sgn(Math.round(bp*10)/10)} bp（±3bp 內算中性）`,s]); }
+  else auto.push(['美德 2 年期利差','缺資料',null]);
+  if(cDX){ const p=cDX.diff/cDX.pv*100; const s = p>0.3?-1:p<-0.3?1:0; autoScores.dxy=s; auto.push(['美元指數',`5 日 ${sgn(p.toFixed(2))}%（±0.3% 內算中性）`,s]); }
+  else auto.push(['美元指數','缺資料',null]);
+  if(cTF && arr(tf).length>=2){ const p=cTF.diff/cTF.pv*100; const s = p>5?-1:p<-5?1:0; autoScores.ttf=s; auto.push(['歐洲天然氣',`${sgn(p.toFixed(1))}%（對比 ${cTF.pd}，±5% 內算中性）`,s]); }
+  else auto.push(['歐洲天然氣','需手動輸入至少兩天',null]);
+  $('autoRows').innerHTML = auto.map(([t,d,s])=>`<div class="row"><div class="lbl">${t}<small>${d}</small></div><span class="pill b${s}">${s==null?'—':s===1?'偏多 +1':s===-1?'偏空 −1':'中性 0'}</span></div>`).join('');
+  renderTotal();
+
+  // 表格
+  const dates = [...new Set([...us.keys(),...de.keys(),...eu.keys()])].sort().reverse().slice(0,15);
+  $('tbl').innerHTML = '<tr><th>日期</th><th>美 2Y</th><th>歐 2Y</th><th>利差 bp</th><th>歐元/美元</th><th>美元指數</th><th>TTF</th></tr>' +
+    dates.map(d=>`<tr><td>${d}</td><td>${fmt(us.get(d))}</td><td>${fmt(de.get(d))}</td><td>${sp.has(d)?sp.get(d).toFixed(1):'—'}</td><td>${fmt(eu.get(d),4)}</td><td>${fmt(dx.get(d),2)}</td><td>${fmt(tf.get(d),2)}</td></tr>`).join('');
+
+  drawCharts(us,de,sp,eu);
+}
+
+/* ================= 手動計分 + 合計 ================= */
+const SKEY='eurusd-score-'+todayKey;
+let man = store(SKEY) || {v:{},note:''};
+$('note').value = man.note||'';
+$('note').addEventListener('input',()=>{ man.note=$('note').value; store(SKEY,man); });
+document.querySelectorAll('.seg').forEach(seg=>seg.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return; const k=seg.dataset.k, v=+b.dataset.v;
+  man.v[k] = man.v[k]===v ? undefined : v; store(SKEY,man); renderTotal();
+}));
+const verdictOf = s => s>=2?'偏多':s<=-2?'偏空':'中性';
+function total(){ let s=0; Object.values(autoScores).forEach(v=>s+=v); Object.values(man.v).forEach(v=>{ if(typeof v==='number') s+=v; }); return s; }
+function renderTotal(){
+  document.querySelectorAll('.seg').forEach(seg=>seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on', man.v[seg.dataset.k]===+b.dataset.v)));
+  const s=total(), vd=verdictOf(s);
+  $('sum').textContent=sgn(s); $('verdict').textContent=vd;
+  $('totalBox').className='total'+(vd==='偏多'?' bull':vd==='偏空'?' bear':'');
+}
+$('copy').addEventListener('click', async ()=>{
+  const lines=[...document.querySelectorAll('#autoRows .row')].map(r=>`• ${r.querySelector('.lbl').firstChild.textContent}：${r.querySelector('.pill').textContent}（${r.querySelector('small').textContent}）`);
+  const mv=k=>man.v[k]===1?'偏多 +1':man.v[k]===-1?'偏空 −1':man.v[k]===0?'中性 0':'未判讀';
+  lines.push(`• 歐洲政治／財政：${mv('fr')}`, `• 消息面／數據：${mv('news')}`);
+  const s=total();
+  const text=`📊 微歐判讀 ${todayKey}\n綜合：${verdictOf(s)}（${sgn(s)}）\n${lines.join('\n')}`+(man.note?`\n重點：${man.note}`:'');
+  try{ await navigator.clipboard.writeText(text); $('msg').textContent='已複製'; }
+  catch(e){ $('msg').textContent='無法自動複製，請手動選取：\n'+text; }
+});
+
+/* ================= 圖表 ================= */
+let ch1, ch2;
+function drawCharts(us,de,sp,eu){
+  if(typeof Chart==='undefined') return;
+  const days = [...new Set([...sp.keys(),...eu.keys()])].sort();
+  const opts = (y1,y2)=>({responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{labels:{boxWidth:12,font:{size:11}}}},
+    scales:{x:{ticks:{maxTicksLimit:8,font:{size:10}}},y:{title:{display:true,text:y1}},...(y2?{y1:{position:'right',grid:{drawOnChartArea:false},title:{display:true,text:y2}}}:{})}});
+  ch1 && ch1.destroy();
+  ch1 = new Chart($('ch1'),{type:'line',data:{labels:days.map(d=>d.slice(5)),datasets:[
+    {label:'美德利差 bp',data:days.map(d=>sp.has(d)?+sp.get(d).toFixed(1):null),borderColor:'#c2362b',pointRadius:0,borderWidth:2,spanGaps:true,yAxisID:'y'},
+    {label:'歐元/美元',data:days.map(d=>eu.get(d)??null),borderColor:'#1f4e8c',pointRadius:0,borderWidth:2,spanGaps:true,yAxisID:'y1'}]},options:opts('bp','EUR/USD')});
+  const d2=[...new Set([...us.keys(),...de.keys()])].sort();
+  ch2 && ch2.destroy();
+  ch2 = new Chart($('ch2'),{type:'line',data:{labels:d2.map(d=>d.slice(5)),datasets:[
+    {label:'美國 2Y',data:d2.map(d=>us.get(d)??null),borderColor:'#c2362b',pointRadius:0,borderWidth:2,spanGaps:true,yAxisID:'y'},
+    {label:'歐元區 2Y',data:d2.map(d=>de.get(d)??null),borderColor:'#16834a',pointRadius:0,borderWidth:2,spanGaps:true,yAxisID:'y1'}]},options:opts('美國 %','歐元區 %')});
+}
+
+/* ================= 載入 ================= */
+async function load(){
+  $('stamp').textContent='抓取中…';
+  const [us,de,fx] = await Promise.all([
+    tryAll('us',[['美國財政部',usTreasury],['FRED',usFred]]),
+    tryAll('de',[['歐洲央行 AAA 2年',()=>ecbYield('B.U2.EUR.4F.G_N_A.SV_C_YM.SR_2Y')],['歐洲央行 全體 2年',()=>ecbYield('B.U2.EUR.4F.G_N_C.SV_C_YM.SR_2Y')]]),
+    tryAll('fx',[['歐洲央行',fxECB],['Frankfurter',()=>fxFrankfurter('https://api.frankfurter.app')],['Frankfurter v1',()=>fxFrankfurter('https://api.frankfurter.dev/v1')]])
+  ]);
+  DATA={us,de,fx};
+  $('stamp').textContent='更新於 '+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false});
+  render();
+}
+$('reload').addEventListener('click', load);
+load();
+
+/* ================= TradingView（只放允許嵌入的商品） ================= */
+function tv(id, widget, cfg){
+  const host=$(id); host.classList.add('tradingview-widget-container');
+  const inner=document.createElement('div'); inner.className='tradingview-widget-container__widget'; inner.style.height='100%'; host.appendChild(inner);
+  const s=document.createElement('script'); s.src='https://s3.tradingview.com/external-embedding/embed-widget-'+widget+'.js'; s.async=true; s.innerHTML=JSON.stringify(cfg); host.appendChild(s);
+}
+tv('tape','tickers',{locale:'zh_TW',colorTheme:'light',isTransparent:false,symbols:[
+  {proName:'FX:EURUSD',title:'歐元/美元'},{proName:'FX:USDJPY',title:'美元/日圓'},{proName:'FX:GBPUSD',title:'英鎊/美元'},{proName:'TVC:UKOIL',title:'布蘭特原油'}]});
+tv('eurusd','advanced-chart',{autosize:true,symbol:'FX:EURUSD',interval:'60',range:'5D',timezone:'Asia/Taipei',theme:'light',style:'1',locale:'zh_TW',
+  hide_top_toolbar:true,allow_symbol_change:false,save_image:false,calendar:false,hide_volume:true,support_host:'https://www.tradingview.com'});
+tv('cal','events',{colorTheme:'light',isTransparent:false,width:'100%',height:'100%',locale:'zh_TW',importanceFilter:'0,1',countryFilter:'us,eu,de,fr'});
+</script>
+</body>
+</html>
