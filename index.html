@@ -87,13 +87,11 @@
     <div class="card">
       <h2>美國 2 年期殖利率 <span class="tag">美國財政部</span></h2>
       <div class="kpi"><div class="val" id="v-us">—</div><div class="chg" id="c-us"></div></div>
-      <div class="man">手動今日值 <input id="m-us" type="number" step="0.001" placeholder="例 4.861"><button data-k="us">存</button></div>
       <div class="src" id="s-us">載入中…</div>
     </div>
     <div class="card">
       <h2>歐元區 2 年期殖利率 <span class="tag">歐洲央行・AAA 曲線 ≈ 德債</span></h2>
       <div class="kpi"><div class="val" id="v-de">—</div><div class="chg" id="c-de"></div></div>
-      <div class="man">手動今日值 <input id="m-de" type="number" step="0.001" placeholder="例 3.155"><button data-k="de">存</button></div>
       <div class="src" id="s-de">載入中…</div>
     </div>
     <div class="card">
@@ -115,11 +113,9 @@
       <div class="src" id="s-eu">載入中…</div>
     </div>
     <div class="card">
-      <h2>歐洲天然氣 TTF <span class="tag">OilPriceAPI（需免費金鑰）</span></h2>
+      <h2>歐洲天然氣 TTF <span class="tag">OilPriceAPI</span></h2>
       <div class="kpi"><div class="val" id="v-tf">—</div><div class="chg" id="c-tf"></div></div>
-      <div class="man">API 金鑰 <input id="k-tf" type="password" placeholder="貼上金鑰" style="width:120px"><button id="k-save">存</button></div>
-      <div class="man">手動今日值 <input id="m-tf" type="number" step="0.01" placeholder="例 94.95"><button data-k="tf">存</button></div>
-      <div class="src" id="s-tf">到 <a href="https://www.oilpriceapi.com/" target="_blank" rel="noopener">oilpriceapi.com</a> 免費註冊取得金鑰；金鑰只存在這個瀏覽器，不會上傳</div>
+      <div class="src" id="s-tf">載入中…</div>
     </div>
     <div class="card span2" style="grid-column:span 2">
       <h2>資料狀態</h2>
@@ -278,7 +274,7 @@ async function ttfFetch(force){
   const key = getKey(); if(!key) throw new Error('尚未設定 API 金鑰');
   let hist = store(TTFH) || {};
   const last = store(TTFC) || 0;
-  if(!force && Date.now()-last < 3*3600e3 && Object.keys(hist).length) return new Map(Object.entries(hist));
+  if(!force && Date.now()-last < 3*3600e3 && Object.keys(hist).length) return new Map(Object.entries(hist).filter(([k])=>!k.startsWith('_t_')));
   const get = async p => {
     const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),15000);
     try{ const r=await fetch('https://api.oilpriceapi.com/v1'+p,{headers:{Authorization:'Token '+key},signal:ctl.signal});
@@ -304,21 +300,10 @@ function setKey(v){
 const DEFAULT_KEY='c4f677615eb8784d37eafeb34e7d0e441f89a0d54e759e69ebef0ceb87ed3369';
 function getKey(){ return new URLSearchParams(location.search).get('k') || store(KKEY) || getCookie('oilkey') || DEFAULT_KEY; }
 (function(){ const qk=new URLSearchParams(location.search).get('k'); if(qk) setKey(qk); })();
-$('k-tf').value = getKey();
-function saveKey(){ const v=$('k-tf').value.trim(); setKey(v); store(TTFC, 0);
-  $('s-tf').textContent = v ? '金鑰已儲存 ✓ 重新抓取中…' : '已清除金鑰'; load(true); }
-$('k-save').addEventListener('click', saveKey);
-$('k-tf').addEventListener('change', saveKey);
 
-/* ================= 手動輸入（累積成走勢） ================= */
+/* ================= 資料合併 ================= */
 const MKEY='eurusd-manual';
-let manual = store(MKEY) || {us:{},de:{},tf:{}};
-['us','de','tf'].forEach(k=>{ manual[k]=manual[k]||{}; if(manual[k][todayKey]!=null) $('m-'+k).value=manual[k][todayKey]; });
-document.querySelectorAll('.man button').forEach(b=>b.addEventListener('click',()=>{
-  const k=b.dataset.k, v=parseFloat($('m-'+k).value);
-  if(isFinite(v)) manual[k][todayKey]=v; else delete manual[k][todayKey];
-  store(MKEY, manual); render();
-}));
+const manual = {us:{},de:{},tf:{}};
 function withManual(map, k){ const m=new Map(map); Object.entries(manual[k]||{}).forEach(([d,v])=>m.set(d,v)); return new Map([...m].sort((a,b)=>a[0]<b[0]?-1:1)); }
 
 /* ================= 計算 ================= */
@@ -364,13 +349,13 @@ function render(){
       (N.reasons||[]).map(r=>`• ${r}`).join('<br>') +
       ((N.events||[]).length?'<div style="margin-top:6px;color:var(--muted)">📅 關鍵時點</div>'+N.events.map(e=>`${imp(e)}${e.time}｜${e.name}`).join('<br>'):'');
   } else { $('n-body').textContent = status.news ? ('讀取失敗：'+status.news.err) : '載入中…'; }
-  if(cSP && cUS && cDE && cSP.d!==cUS.d) $('s-sp').innerHTML = `利差只算兩邊都有的日期（最新共同日 ${cSP.d}）。歐洲央行殖利率約晚 1 個交易日公布，可手動輸入今日德債補上`;
+  if(cSP && cUS && cDE && cSP.d!==cUS.d) $('s-sp').innerHTML = `利差只算兩邊都有的日期（最新共同日 ${cSP.d}）。歐洲央行殖利率約晚 1 個交易日公布`;
 
   // 資料來源說明
-  const srcLine=(id,name)=>{ const s=status[name]; if(!s) return; $('s-'+id).className='src'+(s.ok?'':' err'); $('s-'+id).textContent = s.ok?('來源：'+s.src):('自動抓取失敗，請手動輸入。'+s.err); };
+  const srcLine=(id,name)=>{ const s=status[name]; if(!s) return; $('s-'+id).className='src'+(s.ok?'':' err'); $('s-'+id).textContent = s.ok?('來源：'+s.src):('自動抓取失敗：'+s.err); };
   srcLine('us','us'); srcLine('de','de'); srcLine('eu','fx'); srcLine('dx','fx');
   if(status.tf && status.tf.ok){ $('s-tf').className='src'; $('s-tf').textContent='來源：OilPriceAPI（每 3 小時最多抓一次以節省免費額度）'; }
-  else if(status.tf){ $('s-tf').className='src err'; $('s-tf').innerHTML='自動抓取失敗：'+status.tf.err+'。可手動輸入，或到 <a href="https://www.oilpriceapi.com/" target="_blank" rel="noopener">oilpriceapi.com</a> 取得金鑰'; }
+  else if(status.tf){ $('s-tf').className='src err'; $('s-tf').innerHTML='自動抓取失敗：'+status.tf.err; }
   $('status').innerHTML = [['美國 2 年期','us'],['歐元區 2 年期','de'],['匯率／美元指數','fx'],['歐洲天然氣','tf'],['財政風險溢價','fr'],['消息面判讀','news']].map(([n,k])=>{
     const s=status[k]; if(!s) return `⏳ ${n}`; return s.ok?`✅ ${n}：${s.src}`:`❌ ${n}：${s.err}`; }).join('<br>') +
     '<br>ℹ️ 美國財政部與歐洲央行皆為每日收盤資料（非即時），台灣早上可取得前一交易日數值';
