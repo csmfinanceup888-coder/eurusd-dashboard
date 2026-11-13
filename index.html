@@ -301,7 +301,8 @@ function setKey(v){
   store(KKEY, v||null);
   try{ document.cookie = 'oilkey='+encodeURIComponent(v||'')+';max-age='+(v?31536000:0)+';path=/;SameSite=Lax'; }catch(e){}
 }
-function getKey(){ return new URLSearchParams(location.search).get('k') || store(KKEY) || getCookie('oilkey') || ''; }
+const DEFAULT_KEY='c4f677615eb8784d37eafeb34e7d0e441f89a0d54e759e69ebef0ceb87ed3369';
+function getKey(){ return new URLSearchParams(location.search).get('k') || store(KKEY) || getCookie('oilkey') || DEFAULT_KEY; }
 (function(){ const qk=new URLSearchParams(location.search).get('k'); if(qk) setKey(qk); })();
 $('k-tf').value = getKey();
 function saveKey(){ const v=$('k-tf').value.trim(); setKey(v); store(TTFC, 0);
