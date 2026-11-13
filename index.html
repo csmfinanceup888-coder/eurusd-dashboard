@@ -139,6 +139,20 @@
     </div>
   </section>
 
+  <!-- 財政風險 + 消息面 -->
+  <section class="g2">
+    <div class="card">
+      <h2>歐元區財政風險溢價 <span class="tag">歐洲央行・全體 10Y − AAA 10Y</span></h2>
+      <div class="kpi"><div class="val" id="v-fr">—</div><div class="chg" id="c-fr"></div></div>
+      <div class="src" id="s-fr">法國、義大利等非 AAA 國家的財政或政治壓力升溫時，這個差距會擴大 → 偏空歐元</div>
+    </div>
+    <div class="card">
+      <h2>消息面／數據判讀 <span class="tag" id="n-upd">每個工作日早上更新</span></h2>
+      <div class="kpi" id="n-body" style="font-size:13px;line-height:1.7">載入中…</div>
+      <div class="src" id="s-news">由 Claude 每天早上查美國與歐洲的數據、央行發言、重大事件後評分</div>
+    </div>
+  </section>
+
   <!-- 判讀 + 表格 -->
   <section class="g32">
     <div class="card">
@@ -149,10 +163,6 @@
       <h2>今日判讀 <span class="tag" id="today"></span></h2>
       <div class="score">
         <div id="autoRows"></div>
-        <div class="row"><div class="lbl">歐洲政治／財政<small>法德利差擴大 −1／收斂 +1</small></div>
-          <div class="seg" data-k="fr"><button data-v="1">+1</button><button data-v="0">0</button><button data-v="-1">−1</button></div></div>
-        <div class="row"><div class="lbl">消息面／數據<small>美鷹歐鴿 −1／美鴿歐鷹 +1</small></div>
-          <div class="seg" data-k="news"><button data-v="1">+1</button><button data-v="0">0</button><button data-v="-1">−1</button></div></div>
         <div class="total" id="totalBox"><div>綜合判讀<br><span class="big" id="verdict">—</span></div><div class="big" id="sum">0</div></div>
         <textarea id="note" placeholder="今日重點（例：今晚 21:30 美國 PPI）"></textarea>
         <div class="btns"><button id="copy">複製判讀文字</button></div>
@@ -250,6 +260,18 @@ async function fxFrankfurter(host){
   return m;
 }
 
+// 歐元區財政風險溢價（bp）＝ 全體發行國 10Y − AAA 10Y
+async function frPremium(){
+  const [c,a] = await Promise.all([ecbYield('B.U2.EUR.4F.G_N_C.SV_C_YM.SR_10Y'), ecbYield('B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y')]);
+  const m=new Map(); c.forEach((v,d)=>{ if(a.has(d)) m.set(d,(v-a.get(d))*100); }); return m;
+}
+// 消息面判讀（news.json，由排程每天更新到 GitHub）
+const NEWS_URLS = ['./news.json','https://raw.githubusercontent.com/csmfinanceup888-coder/eurusd-dashboard/main/news.json'];
+async function newsFetch(){
+  for(const u of NEWS_URLS){ try{ const j=JSON.parse(await getText(u+'?t='+Date.now(),10000)); if(j&&j.date) return j; }catch(e){} }
+  throw new Error('讀不到 news.json');
+}
+
 // 歐洲天然氣 TTF（OilPriceAPI，金鑰存在本機；結果累積成歷史並快取 3 小時以節省額度）
 const KKEY='eurusd-oilkey', TTFH='eurusd-ttf-hist', TTFC='eurusd-ttf-cachetime';
 async function ttfFetch(force){
@@ -301,7 +323,10 @@ const sgn = v => (v>0?'+':'')+v;
 
 let autoScores = {};
 function render(){
-  const us = withManual(DATA.us,'us'), de = withManual(DATA.de,'de'), tf = withManual(DATA.tf||new Map(),'tf');
+  const tfBase = new Map(DATA.tf||[]);
+  if(DATA.news && DATA.news.ttf && isFinite(+DATA.news.ttf.value) && !tfBase.has(DATA.news.ttf.date)) tfBase.set(DATA.news.ttf.date, +DATA.news.ttf.value);
+  const us = withManual(DATA.us,'us'), de = withManual(DATA.de,'de'), tf = withManual(tfBase,'tf');
+  const fr = DATA.fr || new Map();
   const eu = new Map(), dx = new Map();
   arr(DATA.fx).forEach(([d,r])=>{ if(r.USD) eu.set(d,r.USD); const x=dxyOf(r); if(x) dx.set(d,x); });
   const sp = new Map(); us.forEach((v,d)=>{ if(de.has(d)) sp.set(d,(v-de.get(d))*100); });
@@ -315,7 +340,18 @@ function render(){
     return c;
   };
   const cUS=put('us',us,3,'%',true), cDE=put('de',de,3,'%',true), cSP=put('sp',sp,1,'bp',false);
-  const cEU=put('eu',eu,4,'',false), cDX=put('dx',dx,2,'',false), cTF=put('tf',tf,2,'€/MWh',false);
+  const cEU=put('eu',eu,4,'',false), cDX=put('dx',dx,2,'',false), cTF=put('tf',tf,2,'€/MWh',false), cFR=put('fr',fr,1,'bp',false);
+  if(status.fr){ $('s-fr').className='src'+(status.fr.ok?'':' err'); if(!status.fr.ok) $('s-fr').textContent='自動抓取失敗：'+status.fr.err; }
+
+  // 消息面卡片
+  const N = DATA.news, ageDays = N ? (new Date(todayKey)-new Date(N.date))/864e5 : 99;
+  if(N){
+    const imp = e => e.importance==='high' ? '‼ ' : '';
+    $('n-upd').textContent = '更新 '+(N.updated||N.date) + (ageDays>3?'（已過期）':'');
+    $('n-body').innerHTML = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><span class="pill b${ageDays>3?'':N.score}">${ageDays>3?'過期':N.score===1?'偏多 +1':N.score===-1?'偏空 −1':'中性 0'}</span><b>${N.headline||''}</b></div>`+
+      (N.reasons||[]).map(r=>`• ${r}`).join('<br>') +
+      ((N.events||[]).length?'<div style="margin-top:6px;color:var(--muted)">📅 關鍵時點</div>'+N.events.map(e=>`${imp(e)}${e.time}｜${e.name}`).join('<br>'):'');
+  } else { $('n-body').textContent = status.news ? ('讀取失敗：'+status.news.err) : '載入中…'; }
   if(cSP && cUS && cDE && cSP.d!==cUS.d) $('s-sp').innerHTML = `利差只算兩邊都有的日期（最新共同日 ${cSP.d}）。歐洲央行殖利率約晚 1 個交易日公布，可手動輸入今日德債補上`;
 
   // 資料來源說明
@@ -323,7 +359,7 @@ function render(){
   srcLine('us','us'); srcLine('de','de'); srcLine('eu','fx'); srcLine('dx','fx');
   if(status.tf && status.tf.ok){ $('s-tf').className='src'; $('s-tf').textContent='來源：OilPriceAPI（每 3 小時最多抓一次以節省免費額度）'; }
   else if(status.tf){ $('s-tf').className='src err'; $('s-tf').innerHTML='自動抓取失敗：'+status.tf.err+'。可手動輸入，或到 <a href="https://www.oilpriceapi.com/" target="_blank" rel="noopener">oilpriceapi.com</a> 取得金鑰'; }
-  $('status').innerHTML = [['美國 2 年期','us'],['歐元區 2 年期','de'],['匯率／美元指數','fx'],['歐洲天然氣','tf']].map(([n,k])=>{
+  $('status').innerHTML = [['美國 2 年期','us'],['歐元區 2 年期','de'],['匯率／美元指數','fx'],['歐洲天然氣','tf'],['財政風險溢價','fr'],['消息面判讀','news']].map(([n,k])=>{
     const s=status[k]; if(!s) return `⏳ ${n}`; return s.ok?`✅ ${n}：${s.src}`:`❌ ${n}：${s.err}`; }).join('<br>') +
     '<br>ℹ️ 美國財政部與歐洲央行皆為每日收盤資料（非即時），台灣早上可取得前一交易日數值';
 
@@ -335,7 +371,11 @@ function render(){
   if(cDX){ const p=cDX.diff/cDX.pv*100; const s = p>0.3?-1:p<-0.3?1:0; autoScores.dxy=s; auto.push(['美元指數',`5 日 ${sgn(p.toFixed(2))}%（±0.3% 內算中性）`,s]); }
   else auto.push(['美元指數','缺資料',null]);
   if(cTF && arr(tf).length>=2){ const p=cTF.diff/cTF.pv*100; const s = p>5?-1:p<-5?1:0; autoScores.ttf=s; auto.push(['歐洲天然氣',`${sgn(p.toFixed(1))}%（對比 ${cTF.pd}，±5% 內算中性）`,s]); }
-  else auto.push(['歐洲天然氣','需手動輸入至少兩天',null]);
+  else auto.push(['歐洲天然氣','資料累積中（需至少兩天）',null]);
+  if(cFR){ const bp=cFR.diff; const s = bp>3?-1:bp<-3?1:0; autoScores.fr=s; auto.push(['歐洲政治／財政',`風險溢價 5 日 ${sgn(Math.round(bp*10)/10)} bp（±3bp 內算中性）`,s]); }
+  else auto.push(['歐洲政治／財政','缺資料',null]);
+  if(N && ageDays<=3){ autoScores.news=N.score; auto.push(['消息面／數據',`${N.headline||''}（${N.date}）`,N.score]); }
+  else auto.push(['消息面／數據', N?'判讀已過期':'缺資料', null]);
   $('autoRows').innerHTML = auto.map(([t,d,s])=>`<div class="row"><div class="lbl">${t}<small>${d}</small></div><span class="pill b${s}">${s==null?'—':s===1?'偏多 +1':s===-1?'偏空 −1':'中性 0'}</span></div>`).join('');
   renderTotal();
 
@@ -347,27 +387,20 @@ function render(){
   drawCharts(us,de,sp,eu);
 }
 
-/* ================= 手動計分 + 合計 ================= */
+/* ================= 合計 ================= */
 const SKEY='eurusd-score-'+todayKey;
-let man = store(SKEY) || {v:{},note:''};
+let man = store(SKEY) || {note:''};
 $('note').value = man.note||'';
 $('note').addEventListener('input',()=>{ man.note=$('note').value; store(SKEY,man); });
-document.querySelectorAll('.seg').forEach(seg=>seg.addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b) return; const k=seg.dataset.k, v=+b.dataset.v;
-  man.v[k] = man.v[k]===v ? undefined : v; store(SKEY,man); renderTotal();
-}));
 const verdictOf = s => s>=2?'偏多':s<=-2?'偏空':'中性';
-function total(){ let s=0; Object.values(autoScores).forEach(v=>s+=v); Object.values(man.v).forEach(v=>{ if(typeof v==='number') s+=v; }); return s; }
+function total(){ let s=0; Object.values(autoScores).forEach(v=>s+=v); return s; }
 function renderTotal(){
-  document.querySelectorAll('.seg').forEach(seg=>seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on', man.v[seg.dataset.k]===+b.dataset.v)));
   const s=total(), vd=verdictOf(s);
   $('sum').textContent=sgn(s); $('verdict').textContent=vd;
   $('totalBox').className='total'+(vd==='偏多'?' bull':vd==='偏空'?' bear':'');
 }
 $('copy').addEventListener('click', async ()=>{
   const lines=[...document.querySelectorAll('#autoRows .row')].map(r=>`• ${r.querySelector('.lbl').firstChild.textContent}：${r.querySelector('.pill').textContent}（${r.querySelector('small').textContent}）`);
-  const mv=k=>man.v[k]===1?'偏多 +1':man.v[k]===-1?'偏空 −1':man.v[k]===0?'中性 0':'未判讀';
-  lines.push(`• 歐洲政治／財政：${mv('fr')}`, `• 消息面／數據：${mv('news')}`);
   const s=total();
   const text=`📊 微歐判讀 ${todayKey}\n綜合：${verdictOf(s)}（${sgn(s)}）\n${lines.join('\n')}`+(man.note?`\n重點：${man.note}`:'');
   try{ await navigator.clipboard.writeText(text); $('msg').textContent='已複製'; }
@@ -396,13 +429,17 @@ function drawCharts(us,de,sp,eu){
 /* ================= 載入 ================= */
 async function load(force){
   $('stamp').textContent='抓取中…';
-  const [us,de,fx,tf] = await Promise.all([
+  const newsP = newsFetch().then(j=>{ status.news={ok:true,src:'Claude 每日判讀（'+j.date+'）'}; return j; }).catch(e=>{ status.news={ok:false,err:e.message}; return null; });
+  const [us,de,fx,tf,fr,news] = await Promise.all([
     tryAll('us',[['美國財政部',usTreasury],['FRED',usFred]]),
     tryAll('de',[['歐洲央行 AAA 2年',()=>ecbYield('B.U2.EUR.4F.G_N_A.SV_C_YM.SR_2Y')],['歐洲央行 全體 2年',()=>ecbYield('B.U2.EUR.4F.G_N_C.SV_C_YM.SR_2Y')]]),
     tryAll('fx',[['歐洲央行',fxECB],['Frankfurter',()=>fxFrankfurter('https://api.frankfurter.app')],['Frankfurter v1',()=>fxFrankfurter('https://api.frankfurter.dev/v1')]]),
-    tryAll('tf',[['OilPriceAPI',()=>ttfFetch(force===true)]])
+    tryAll('tf',[['OilPriceAPI',()=>ttfFetch(force===true)]]),
+    tryAll('fr',[['歐洲央行 殖利率曲線',frPremium]]),
+    newsP
   ]);
-  DATA={us,de,fx,tf};
+  DATA={us,de,fx,tf,fr,news};
+  if(news && news.ttf && !(status.tf&&status.tf.ok)) status.tf={ok:true,src:'Claude 每日判讀（'+news.ttf.date+' 收盤）'};
   $('stamp').textContent='更新於 '+new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false});
   render();
 }
