@@ -275,7 +275,7 @@ async function newsFetch(){
 // 歐洲天然氣 TTF（OilPriceAPI，金鑰存在本機；結果累積成歷史並快取 3 小時以節省額度）
 const KKEY='eurusd-oilkey', TTFH='eurusd-ttf-hist', TTFC='eurusd-ttf-cachetime';
 async function ttfFetch(force){
-  const key = store(KKEY); if(!key) throw new Error('尚未設定 API 金鑰');
+  const key = getKey(); if(!key) throw new Error('尚未設定 API 金鑰');
   let hist = store(TTFH) || {};
   const last = store(TTFC) || 0;
   if(!force && Date.now()-last < 3*3600e3 && Object.keys(hist).length) return new Map(Object.entries(hist));
@@ -295,8 +295,19 @@ async function ttfFetch(force){
   store(TTFH, hist); store(TTFC, Date.now());
   return new Map(Object.entries(hist).filter(([k])=>!k.startsWith('_t_')));
 }
-$('k-tf').value = store(KKEY) || '';
-$('k-save').addEventListener('click', ()=>{ const v=$('k-tf').value.trim(); store(KKEY, v||null); store(TTFC, 0); load(true); });
+// 金鑰保存：網址參數 ?k= ＞ 瀏覽器儲存 ＞ cookie（三重備援，避免重新整理後消失）
+function getCookie(n){ const m=document.cookie.match(new RegExp('(?:^|; )'+n+'=([^;]*)')); return m?decodeURIComponent(m[1]):''; }
+function setKey(v){
+  store(KKEY, v||null);
+  try{ document.cookie = 'oilkey='+encodeURIComponent(v||'')+';max-age='+(v?31536000:0)+';path=/;SameSite=Lax'; }catch(e){}
+}
+function getKey(){ return new URLSearchParams(location.search).get('k') || store(KKEY) || getCookie('oilkey') || ''; }
+(function(){ const qk=new URLSearchParams(location.search).get('k'); if(qk) setKey(qk); })();
+$('k-tf').value = getKey();
+function saveKey(){ const v=$('k-tf').value.trim(); setKey(v); store(TTFC, 0);
+  $('s-tf').textContent = v ? '金鑰已儲存 ✓ 重新抓取中…' : '已清除金鑰'; load(true); }
+$('k-save').addEventListener('click', saveKey);
+$('k-tf').addEventListener('change', saveKey);
 
 /* ================= 手動輸入（累積成走勢） ================= */
 const MKEY='eurusd-manual';
